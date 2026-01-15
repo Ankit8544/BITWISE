@@ -1,4 +1,4 @@
-# 🪙 Bitcoin Real-Time MIS & Risk Analysis System
+# <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" width="28"/> Bitcoin Real-Time MIS & Risk Analysis System
 <artifact identifier="btc-mis-documentation" type="text/markdown" title="Bitcoin Real-Time MIS & Risk Analysis - Complete Documentation">
 <div align="center">
 

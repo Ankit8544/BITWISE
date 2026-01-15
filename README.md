@@ -1,4 +1,4 @@
-# <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" width="28"/> BITWISE ####wwww
+# <img src="https://cryptologos.cc/logos/bitcoin-btc-logo.png" width="28"/> BITWISE
 <artifact identifier="btc-mis-documentation" type="text/markdown" title="Bitcoin Real-Time MIS & Risk Analysis - Complete Documentation">
 <div align="center">
 

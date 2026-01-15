@@ -4,6 +4,7 @@
 
 ![Bitcoin](https://img.shields.io/badge/Bitcoin-BTC-orange?style=for-the-badge&logo=bitcoin)
 ![Binance](https://img.shields.io/badge/Binance-API-yellow?style=for-the-badge&logo=binance)
+![Binance](https://img.shields.io/badge/Binance-WebSocket-yellow?style=for-the-badge&logo=binance)
 ![Excel](https://img.shields.io/badge/Excel-217346?style=for-the-badge&logo=microsoft-excel&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)
 ![VBA](https://img.shields.io/badge/VBA-Automation-red?style=for-the-badge&logo=microsoft)

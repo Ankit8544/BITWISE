@@ -1,3 +1,4 @@
+# 🪙 Bitcoin Real-Time MIS & Risk Analysis System
 <artifact identifier="btc-mis-documentation" type="text/markdown" title="Bitcoin Real-Time MIS & Risk Analysis - Complete Documentation">
 # 🪙 Bitcoin Real-Time MIS & Risk Analysis System
 

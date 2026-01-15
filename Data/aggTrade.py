@@ -3,6 +3,7 @@ import aiohttp
 import websockets
 import datetime as dt
 import json
+import asyncio
 
 # ============================
 # Binance Endpoints
@@ -130,6 +131,7 @@ async def fetch_aggtrades_looped(
 # XlOil Streaming Function
 # ============================
 
+
 @xlo.func
 async def AggTradeStreamWindow(
     symbol: str,
@@ -140,43 +142,74 @@ async def AggTradeStreamWindow(
     symbol = symbol.upper()
     ws_url = f"{BINANCE_WS}/{symbol.lower()}@aggTrade"
 
-    async with aiohttp.ClientSession() as session:
+    last_snapshot = None
+    reconnect_delay = 5
 
-        # ---------- REST BACKFILL ----------
-        trades = await fetch_aggtrades_looped(
-            session=session,
-            symbol=symbol,
-            minutes=minutes,
-            max_loops=100
-        )
+    STATUS_ROW_LIVE = ["STREAM_STATUS", "LIVE"] + [""] * (len(HEADER) - 2)
+    STATUS_ROW_DOWN = ["STREAM_STATUS", "DISCONNECTED"] + [""] * (len(HEADER) - 2)
 
-        if trades:
-            last_id = max(t["AggTradeID"] for t in trades)
-        else:
-            last_id = -1
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
 
-        filtered = filter_by_time_window(trades, minutes)
-        yield [HEADER] + [as_row(t) for t in filtered]
+                # ---------- REST BACKFILL ----------
+                trades = await fetch_aggtrades_looped(
+                    session=session,
+                    symbol=symbol,
+                    minutes=minutes,
+                    max_loops=100
+                )
 
-        # ---------- WEBSOCKET STREAM ----------
-        async with websockets.connect(ws_url, ping_interval=20) as ws:
-            async for msg in ws:
-                t = json.loads(msg)
-                agg_id = int(t["a"])
-
-                # Skip duplicates
-                if agg_id <= last_id:
-                    continue
-
-                d = normalize_aggtrade(t)
-                trades.append(d)
-                last_id = agg_id
-
-                # Optional rolling buffer
-                if limit is not None and limit > 0 and len(trades) > limit:
-                    trades = trades[-limit:]
+                if trades:
+                    last_id = max(t["AggTradeID"] for t in trades)
+                else:
+                    last_id = -1
 
                 filtered = filter_by_time_window(trades, minutes)
-                yield [HEADER] + [as_row(t) for t in filtered]
+                table = [HEADER] + [as_row(t) for t in filtered] + [STATUS_ROW_LIVE]
+                last_snapshot = table
+                yield table
+
+                # ---------- WEBSOCKET STREAM ----------
+                async with websockets.connect(
+                    ws_url,
+                    ping_interval=20,
+                    ping_timeout=10
+                ) as ws:
+
+                    async for msg in ws:
+                        t = json.loads(msg)
+                        agg_id = int(t["a"])
+
+                        # Skip duplicates
+                        if agg_id <= last_id:
+                            continue
+
+                        d = normalize_aggtrade(t)
+                        trades.append(d)
+                        last_id = agg_id
+
+                        # Optional rolling buffer
+                        if limit is not None and limit > 0 and len(trades) > limit:
+                            trades = trades[-limit:]
+
+                        filtered = filter_by_time_window(trades, minutes)
+                        table = (
+                            [HEADER]
+                            + [as_row(t) for t in filtered]
+                            + [STATUS_ROW_LIVE]
+                        )
+
+                        last_snapshot = table
+                        yield table
+
+        except Exception:
+            # ❌ Excel ko error nahi milega
+            if last_snapshot:
+                fallback = last_snapshot[:-1] + [STATUS_ROW_DOWN]
+                yield fallback
+
+            # ⏳ wait then auto-restart
+            await asyncio.sleep(reconnect_delay)
 
 

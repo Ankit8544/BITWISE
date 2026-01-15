@@ -63,16 +63,38 @@ async def AllCoinsTickerStream():
     =AllCoinsTickerStream()
     """
 
-    state = {}   # symbol -> latest ticker
+    state = {}
+    last_snapshot = None
+    reconnect_delay = 5
 
-    async with websockets.connect(BINANCE_WS, ping_interval=20) as ws:
-        async for raw in ws:
-            data = json.loads(raw)
+    STATUS_ROW_LIVE = ["STREAM_STATUS", "LIVE"] + [""] * (len(HEADER) - 2)
+    STATUS_ROW_DOWN = ["STREAM_STATUS", "DISCONNECTED"] + [""] * (len(HEADER) - 2)
 
-            for item in data:
-                d = normalize(item)
-                state[d["Symbol"]] = d
+    while True:
+        try:
+            async with websockets.connect(
+                BINANCE_WS,
+                ping_interval=20,
+                ping_timeout=10
+            ) as ws:
 
-            # Yield FULL table every update
-            rows = [as_row(state[s]) for s in sorted(state.keys())]
-            yield [HEADER] + rows
+                async for raw in ws:
+                    data = json.loads(raw)
+
+                    for item in data:
+                        d = normalize(item)
+                        state[d["Symbol"]] = d
+
+                    rows = [as_row(state[s]) for s in sorted(state)]
+                    table = [HEADER] + rows + [STATUS_ROW_LIVE]
+
+                    last_snapshot = table
+                    yield table
+
+        except Exception:
+            # ❌ no Excel error
+            if last_snapshot:
+                fallback = last_snapshot[:-1] + [STATUS_ROW_DOWN]
+                yield fallback
+
+            await asyncio.sleep(reconnect_delay)

@@ -109,46 +109,86 @@ async def KlineStream(symbol: str, interval: str, limit: int = DEFAULT_LIMIT):
     symbol = symbol.upper()
     ws_url = f"{BINANCE_WS}/{symbol.lower()}@kline_{interval}"
 
-    async with aiohttp.ClientSession() as session:
+    reconnect_delay = 5
+    last_snapshot = None
 
-        # ---------- Initial REST Load ----------
-        rest_data = await fetch_klines(session, symbol, interval, limit)
+    STATUS_ROW_LIVE = ["STREAM_STATUS", "LIVE"] + [""] * (len(HEADER) - 2)
+    STATUS_ROW_DOWN = ["STREAM_STATUS", "DISCONNECTED"] + [""] * (len(HEADER) - 2)
 
-        klines = {d["OpenTime"]: d for d in rest_data}
+    while True:
+        try:
+            async with aiohttp.ClientSession() as session:
 
-        def enforce_limit():
-            if len(klines) > limit:
-                excess = len(klines) - limit
-                for t in sorted(klines.keys())[:excess]:
-                    del klines[t]
+                # ---------- Initial REST Load ----------
+                rest_data = await fetch_klines(session, symbol, interval, limit)
+                klines = {d["OpenTime"]: d for d in rest_data}
 
-        def sorted_rows():
-            return [as_row(klines[t]) for t in sorted(klines.keys())]
+                def enforce_limit():
+                    if len(klines) > limit:
+                        excess = len(klines) - limit
+                        for t in sorted(klines.keys())[:excess]:
+                            del klines[t]
 
-        enforce_limit()
-        yield [HEADER] + sorted_rows()
+                def sorted_rows():
+                    return [as_row(klines[t]) for t in sorted(klines.keys())]
 
-        # ---------- WebSocket Stream ----------
-        async with websockets.connect(ws_url, ping_interval=20) as ws:
-            async for raw in ws:
-                msg = json.loads(raw)
-
-                if "k" not in msg:
-                    continue
-
-                k = msg["k"]
-                d = normalize_ws_kline(k)
-
-                klines[d["OpenTime"]] = d
                 enforce_limit()
+                table = [HEADER] + sorted_rows() + [STATUS_ROW_LIVE]
+                last_snapshot = table
+                yield table
 
-                yield [HEADER] + sorted_rows()
+                # ---------- WebSocket Stream ----------
+                async with websockets.connect(
+                    ws_url,
+                    ping_interval=20,
+                    ping_timeout=10
+                ) as ws:
 
-                # ---------- On Candle Close ----------
-                if k.get("x", False):
-                    fresh = await fetch_klines(session, symbol, interval, limit)
-                    for row in fresh:
-                        klines[row["OpenTime"]] = row
+                    async for raw in ws:
+                        msg = json.loads(raw)
 
-                    enforce_limit()
-                    yield [HEADER] + sorted_rows()
+                        if "k" not in msg:
+                            continue
+
+                        k = msg["k"]
+                        d = normalize_ws_kline(k)
+
+                        klines[d["OpenTime"]] = d
+                        enforce_limit()
+
+                        table = (
+                            [HEADER]
+                            + sorted_rows()
+                            + [STATUS_ROW_LIVE]
+                        )
+                        last_snapshot = table
+                        yield table
+
+                        # ---------- On Candle Close ----------
+                        if k.get("x", False):
+                            fresh = await fetch_klines(
+                                session, symbol, interval, limit
+                            )
+                            for row in fresh:
+                                klines[row["OpenTime"]] = row
+
+                            enforce_limit()
+                            table = (
+                                [HEADER]
+                                + sorted_rows()
+                                + [STATUS_ROW_LIVE]
+                            )
+                            last_snapshot = table
+                            yield table
+
+        except Exception:
+            # ❌ Excel ko error mat dikhao
+            # 🧊 last data freeze rahe
+            if last_snapshot:
+                fallback = last_snapshot[:-1] + [STATUS_ROW_DOWN]
+                yield fallback
+
+            # ⏳ sirf error ke baad wait
+            await asyncio.sleep(reconnect_delay)
+
+

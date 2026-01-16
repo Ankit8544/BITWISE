@@ -12,7 +12,7 @@
 ![Binance](https://img.shields.io/badge/Binance-WebSocket-yellow?style=for-the-badge&logo=binance)
 ![XlOil](https://img.shields.io/badge/XlOil-Data%20Stream-blue?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)
-![Excel](https://img.shields.io/badge/Excel-217346?style=for-the-badge&logo=microsoft-excel&logoColor=white)
+![Excel](https://img.shields.io/badge/Excel-Analytics-217346?style=for-the-badge&logo=microsoft-excel&logoColor=white)
 ![VBA](https://img.shields.io/badge/VBA-Automation-red?style=for-the-badge&logo=microsoft)
 
 *Comprehensive Risk Analytics | Live Market Data | Advanced Visualization*

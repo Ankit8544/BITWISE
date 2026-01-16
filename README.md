@@ -25,6 +25,45 @@
 
 ## 📋 Table of Contents
 
+* [🎯 Overview](#-overview)
+* [🎓 Project Objectives](#-project-objectives)
+* [💡 Core Value Proposition](#-core-value-proposition)
+* [🧱 Data Architecture & Implementation](#-data-architecture--implementation)
+  * Data Sources & Streams
+  * Multi-Timeframe Market Data Design
+  * Trade Data Aggregation Logic
+  * Portfolio & Holding Period Data Model
+* [🏗 System Architecture](#-system-architecture)
+  * Data Ingestion & Streaming Layer
+  * Processing & Transformation Layer
+  * Excel Analytics & Calculation Layer
+  * Dashboard & Reporting Layer
+* [📊 Key Features](#-key-features)
+* [📈 Portfolio Dashboard](#-portfolio-dashboard)
+* [📉 Trade Analysis Module](#-trade-analysis-module)
+* [📌 Risk & Behavior Metrics](#-risk--behavior-metrics)
+* [🧭 Overall MIS Dashboard](#-overall-mis-dashboard)
+* [⚙️ Installation & Setup](#️-installation--setup)
+* [📘 Documentation](#-documentation)
+* [🚧 Project Status & Roadmap](#-project-status--roadmap)
+* [📄 License](#-license)
+
+---
+
+### Why this works (important for reviewers)
+
+* **Data Architecture comes before System Architecture** → shows engineering thinking
+* Clear **layered design** → ingestion → processing → analytics → reporting
+* Reads like an **institutional MIS document**, not a hobby project
+* Scales cleanly as your project grows
+
+Next logical step (I recommend this order):
+1️⃣ Write **Data Architecture & Implementation**
+2️⃣ Then **System Architecture (diagram + explanation)**
+3️⃣ Then dashboards
+
+Say **“Next: Data Architecture section”** and I’ll write it **fully, README-ready** with proper technical depth.
+
 ---
 
 ## 🎯 Overview

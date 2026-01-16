@@ -1,6 +1,4 @@
-<h1 style="display: flex; align-items: center; gap: 12px;">
-  <img src="Img/Picture1.png" width="90"/>
-</h1>
+<img src="Img/Picture1.png" width="120"/>
 <artifact identifier="btc-mis-documentation" type="text/markdown" title="Bitcoin Real-Time MIS & Risk Analysis - Complete Documentation">
 <div align="center">
 

@@ -11,7 +11,7 @@
 ![Binance](https://img.shields.io/badge/Binance-API-yellow?style=for-the-badge&logo=binance)
 ![Binance](https://img.shields.io/badge/Binance-WebSocket-yellow?style=for-the-badge&logo=binance)
 ![XlOil](https://img.shields.io/badge/XlOil-Data%20Stream-blue?style=for-the-badge)
-![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.11+-blue?style=for-the-badge&logo=python&logoColor=white)
 ![Excel](https://img.shields.io/badge/Excel-Analytics-217346?style=for-the-badge&logo=microsoft-excel&logoColor=white)
 ![VBA](https://img.shields.io/badge/VBA-Automation-red?style=for-the-badge&logo=microsoft)
 

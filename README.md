@@ -671,9 +671,8 @@ This project is provided as-is for educational and personal use.
 
 For issues or questions:
 
-- 📧 Email: [your-email@example.com]
-- 💬 Telegram: [@yourusername]
-- 🐛 Issues: [GitHub Issues](https://github.com/yourusername/repo/issues)
+- 📧 Email: [ankitkumar875740@gmail.com]
+- 💬 Telegram: [@kignoflove]
 
 ---
 
